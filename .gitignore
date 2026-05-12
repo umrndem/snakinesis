@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+dist/
+build/
+snake_high_scores.json
+PROJECT_CHANGES.TXT
+PROJECT_SPEC.txt
+.DS_Store
