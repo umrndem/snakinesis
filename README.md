@@ -12,7 +12,8 @@ The project is built with Python, OpenCV, MediaPipe FaceMesh, NumPy, and Pillow.
 - Boundaryless wrap mode and optional Classic Walls mode
 - Main menu, pause menu, instructions pane, high scores, and game-over menu
 - Timed 2x2 bonus food that gives extra score without growing the snake
-- Face-cover auto-pause when tracking is lost during gameplay
+- Auto-pause with separate messages for covered face vs. face out of frame
+- Sound effects for menu browsing, menu select/back, pause, food pickup, death, and hissing quit
 - Graceful goodbye screen: `GOODBYE` / `HISS YOU LATER`
 - Retro pixel-art logo, icon, color palette, and Press Start 2P font
 - Resizable OpenCV window with proportional letterboxing
@@ -43,10 +44,23 @@ High scores are stored separately for Boundaryless and Classic Walls mode in `sn
 ### Pause And Exit
 
 - Press `P` or `Esc` during gameplay to open the pause menu.
-- Covering your face briefly during gameplay opens the pause menu automatically.
-- The pause menu includes `Resume Game`, `Instructions`, `High Scores`, `Return to Main Menu`, and `Quit`.
+- Losing face tracking briefly during gameplay opens the pause menu automatically, with separate notices for a covered face and a face that moved out of frame.
+- The pause menu includes `Resume Game`, `Sound`, `Instructions`, `High Scores`, `Return to Main Menu`, and `Quit`.
 - `Return to Main Menu` warns that all current progress will be lost.
 - Quitting shows a short goodbye screen before the app closes.
+
+### Sound Effects
+
+- Menu movement plays a short retro navigation blip.
+- Menu selection plays a brighter confirmation cue.
+- Backing out of submenus or the pause menu plays a descending back cue.
+- Pausing the game plays a short pause cue.
+- Food pickup plays a bright reward chime.
+- Self-collision or wall collision plays a death cue.
+- Quitting plays a short snake hiss.
+- Sound can be toggled ON/OFF directly from both the main menu and pause menu.
+
+Sound playback uses the cross-platform `sounddevice` package and bundled WAV files. The quit hiss is a public-domain rattlesnake WAV listed by Parallax Learn with original source from U.S. Fish & Wildlife.
 
 ## Controls
 
@@ -61,7 +75,7 @@ High scores are stored separately for Boundaryless and Classic Walls mode in `sn
 | Re-arm next movement | Return head to the neutral center zone |
 | Menu select | Hold head/right tilt to the right |
 | Menu back | Hold head/left tilt to the left |
-| Auto-pause | Cover face / lose face lock briefly |
+| Auto-pause | Cover face or move fully out of frame briefly |
 
 The small tracking pad in the UI shows the live head position. A movement is registered only when the tracking dot crosses the configured activation radius. After a movement fires, the dot must return to the neutral zone before another movement can trigger.
 
@@ -101,6 +115,15 @@ Pipeline:
 ├── assets/
 │   ├── snakinesis_logo.png
 │   ├── snakinesis.ico
+│   ├── sounds/
+│   │   ├── death.wav
+│   │   ├── food_pickup.wav
+│   │   ├── menu_back.wav
+│   │   ├── menu_move.wav
+│   │   ├── menu_select.wav
+│   │   ├── NOTICE.txt
+│   │   ├── pause.wav
+│   │   └── quit_hiss.wav
 │   └── fonts/
 │       ├── PressStart2P-Regular.ttf
 │       └── OFL-PressStart2P.txt
@@ -110,6 +133,7 @@ Pipeline:
 │   ├── gesture.py
 │   ├── landmarks.py
 │   ├── math_utils.py
+│   ├── sound.py
 │   ├── tracker.py
 │   └── snake_game/
 │       ├── game.py
@@ -125,6 +149,7 @@ Pipeline:
 - `snakinesis/app.py`: webcam loop, FaceMesh integration, OpenCV window handling, icon setup, and app lifecycle.
 - `snakinesis/config.py`: central configuration for camera, game speed, grid size, tracking sensitivity, menus, and timing.
 - `snakinesis/tracker.py`: converts FaceMesh landmarks into smoothed face-center and roll measurements.
+- `snakinesis/sound.py`: lightweight Windows sound-effect playback for bundled WAV files.
 - `snakinesis/snake_game/head_control.py`: calibration, neutral zone handling, movement activation, one-shot gesture re-arming, and menu tilt signals.
 - `snakinesis/snake_game/game.py`: Snake state machine, collision rules, food spawning, menus, high scores, rendering, pause logic, and graceful exit.
 - `snakinesis/landmarks.py`: MediaPipe landmark indices used by the tracker.
@@ -143,8 +168,11 @@ Python dependencies:
 - `opencv-python==4.11.0.86`
 - `numpy==1.26.4`
 - `pillow>=10.0.0`
+- `sounddevice==0.5.5`
 
 PyAutoGUI is not required. Earlier desktop-control experiments used it conceptually, but the current project is a standalone Snake game and does not depend on desktop automation.
+
+Sound effects are bundled WAV files and are played through `sounddevice` for cross-platform source compatibility.
 
 ## Install
 
@@ -234,6 +262,8 @@ The tests cover:
 - Bonus food scoring without growth
 - Menu selection/back behavior
 - Pause-menu behavior
+- Sound-event queueing
+- Sound ON/OFF menu toggling
 - High-score persistence
 - Goodbye/quit flow
 - Letterboxed rendering
@@ -270,6 +300,8 @@ The tests cover:
 
 - `assets/snakinesis_logo.png`: pixel-art snake logo used in the main menu.
 - `assets/snakinesis.ico`: Windows title-bar/taskbar icon.
+- `assets/sounds/`: retro WAV sound effects for menu movement, select/back, pause, food pickup, death, and quit hiss.
+- `assets/sounds/NOTICE.txt`: sound source and public-domain attribution notes.
 - `assets/fonts/PressStart2P-Regular.ttf`: bundled retro pixel font.
 - `assets/fonts/OFL-PressStart2P.txt`: font license.
 

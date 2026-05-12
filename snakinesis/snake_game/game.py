@@ -91,6 +91,7 @@ class SnakeGame:
     _paused: bool = False
     _last_step_time_s: float = 0.0
     _boundary_mode: BoundaryMode = BoundaryMode.BOUNDARYLESS
+    _sound_enabled: bool = True
     _screen: SnakeScreen = SnakeScreen.PLAYING
     _menu_index: int = 0
     _game_over_index: int = 0
@@ -100,6 +101,7 @@ class SnakeGame:
     _high_scores: dict = None  # type: ignore[assignment]
     _quit_requested: bool = False
     _exit_started_s: Optional[float] = None
+    _sound_events: List[str] = None  # type: ignore[assignment]
     _menu_hold_action: Optional[str] = None
     _menu_hold_started_s: Optional[float] = None
     _menu_hold_progress: float = 0.0
@@ -117,6 +119,7 @@ class SnakeGame:
         self.menu_side_threshold = max(0.01, float(self.menu_side_threshold))
         self.menu_side_release_threshold = min(self.menu_side_threshold, max(0.0, float(self.menu_side_release_threshold)))
         self._high_scores = self._load_high_scores()
+        self._sound_events = []
         self.reset()
         if self.start_in_menu:
             self._screen = SnakeScreen.MAIN_MENU
@@ -161,12 +164,21 @@ class SnakeGame:
         return self._boundary_mode
 
     @property
+    def sound_enabled(self) -> bool:
+        return self._sound_enabled
+
+    @property
     def high_score(self) -> int:
         return int(self._high_scores.get(self._mode_key(self._boundary_mode), 0))
 
     @property
     def quit_requested(self) -> bool:
         return self._quit_requested
+
+    def pop_sound_events(self) -> Tuple[str, ...]:
+        events = tuple(self._sound_events)
+        self._sound_events.clear()
+        return events
 
     @property
     def accepts_direction_input(self) -> bool:
@@ -187,6 +199,7 @@ class SnakeGame:
         self._screen = SnakeScreen.MAIN_MENU
         self._paused = False
         self._reset_menu_hold()
+        self._queue_sound("pause")
 
     def request_quit(self) -> None:
         self._start_exit()
@@ -278,34 +291,56 @@ class SnakeGame:
 
     def _move_menu(self, delta: int) -> None:
         if self._screen == SnakeScreen.MAIN_MENU:
+            old_index = self._menu_index
             self._menu_index = (self._menu_index + delta) % len(self._main_menu_items)
+            if self._menu_index != old_index:
+                self._queue_sound("menu_move")
         elif self._screen == SnakeScreen.GAME_OVER:
+            old_index = self._game_over_index
             self._game_over_index = (self._game_over_index + delta) % len(self._game_over_items)
+            if self._game_over_index != old_index:
+                self._queue_sound("menu_move")
 
     def _select_menu_item(self) -> None:
         if self._screen == SnakeScreen.MAIN_MENU:
             item = self._main_menu_items[self._menu_index]
             if item == "Resume Game":
+                self._queue_sound("menu_select")
                 self._resume_game()
             elif item == "Start Game":
+                self._queue_sound("menu_select")
                 self.reset()
             elif item.startswith("Classic Walls"):
+                self._queue_sound("menu_select")
                 self._toggle_boundary_mode()
+            elif item.startswith("Sound"):
+                sound_was_enabled = self._sound_enabled
+                if sound_was_enabled:
+                    self._queue_sound("menu_select")
+                self._toggle_sound()
+                if not sound_was_enabled:
+                    self._queue_sound("menu_select")
             elif item == "Instructions":
+                self._queue_sound("menu_select")
                 self._screen = SnakeScreen.INSTRUCTIONS
             elif item == "High Scores":
+                self._queue_sound("menu_select")
                 self._screen = SnakeScreen.HIGH_SCORES
             elif item == "Return to Main Menu":
+                self._queue_sound("menu_select")
                 self._return_to_main_menu()
             else:
                 self.request_quit()
         elif self._screen == SnakeScreen.GAME_OVER:
             item = self._game_over_items[self._game_over_index]
             if item == "Restart":
+                self._queue_sound("menu_select")
                 self.reset()
             elif item == "Main Menu":
+                self._queue_sound("menu_select")
                 self._return_to_main_menu()
             elif item == "High Scores":
+                self._queue_sound("menu_select")
                 self._in_game_menu = False
                 self._pause_notice = None
                 self._screen = SnakeScreen.HIGH_SCORES
@@ -315,10 +350,13 @@ class SnakeGame:
 
     def _back_menu(self) -> None:
         if self._screen in (SnakeScreen.INSTRUCTIONS, SnakeScreen.HIGH_SCORES):
+            self._queue_sound("menu_back")
             self._screen = SnakeScreen.MAIN_MENU
         elif self._screen == SnakeScreen.MAIN_MENU and self._in_game_menu:
+            self._queue_sound("menu_back")
             self._resume_game()
         elif self._screen == SnakeScreen.GAME_OVER:
+            self._queue_sound("menu_back")
             self._return_to_main_menu()
 
     def _reset_menu_hold(self) -> None:
@@ -328,6 +366,9 @@ class SnakeGame:
 
     def _toggle_boundary_mode(self) -> None:
         self._boundary_mode = BoundaryMode.WALLS if self._boundary_mode == BoundaryMode.BOUNDARYLESS else BoundaryMode.BOUNDARYLESS
+
+    def _toggle_sound(self) -> None:
+        self._sound_enabled = not self._sound_enabled
 
     def _resume_game(self) -> None:
         self._screen = SnakeScreen.PLAYING
@@ -354,6 +395,12 @@ class SnakeGame:
         self._exit_started_s = None
         self._quit_requested = False
         self._reset_menu_hold()
+        self._queue_sound("quit_hiss")
+
+    def _queue_sound(self, sound_name: str) -> None:
+        if not self._sound_enabled:
+            return
+        self._sound_events.append(sound_name)
 
     def _menu_action_from_pose(self, *, dx: float, dy: float, roll_delta_deg: float) -> Optional[str]:
         allow_select = self._screen in (SnakeScreen.MAIN_MENU, SnakeScreen.GAME_OVER)
@@ -419,11 +466,13 @@ class SnakeGame:
         if eating_bonus:
             self._score += self.bonus_food_score
             self._bonus_food = None
+            self._queue_sound("food_pickup")
         elif eating:
             self._score += 1
             self._normal_foods_since_bonus += 1
             self._growth_units += self.movement_units_per_cell
             self._food = self._spawn_food()
+            self._queue_sound("food_pickup")
             if self._normal_foods_since_bonus >= self.bonus_food_every:
                 self._bonus_food = self._spawn_bonus_food(now_s)
                 self._normal_foods_since_bonus = 0
@@ -568,6 +617,7 @@ class SnakeGame:
         self._paused = False
         self._screen = SnakeScreen.GAME_OVER
         self._save_high_score()
+        self._queue_sound("death")
 
     @property
     def _unit_width(self) -> int:
@@ -579,10 +629,11 @@ class SnakeGame:
 
     @property
     def _main_menu_items(self) -> Tuple[str, ...]:
+        sound_state = "ON" if self._sound_enabled else "OFF"
         if self._in_game_menu:
-            return ("Resume Game", "Instructions", "High Scores", "Return to Main Menu", "Quit")
+            return ("Resume Game", f"Sound: {sound_state}", "Instructions", "High Scores", "Return to Main Menu", "Quit")
         walls_state = "ON" if self._boundary_mode == BoundaryMode.WALLS else "OFF"
-        return ("Start Game", f"Classic Walls: {walls_state}", "Instructions", "High Scores", "Quit")
+        return ("Start Game", f"Classic Walls: {walls_state}", f"Sound: {sound_state}", "Instructions", "High Scores", "Quit")
 
     @property
     def _game_over_items(self) -> Tuple[str, ...]:

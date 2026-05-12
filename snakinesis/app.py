@@ -12,6 +12,7 @@ import mediapipe as mp
 from .config import AppConfig
 from .gesture import GazeDirection
 from .snake_game import HeadGestureController, SnakeGame
+from .sound import SoundPlayer
 from .tracker import FaceTracker
 
 _WINDOW_ICON_HANDLES: list[int] = []
@@ -37,6 +38,41 @@ def _window_target_size(window_name: str, fallback: Tuple[int, int]) -> Tuple[in
     if width <= 0 or height <= 0:
         return fallback
     return (width, height)
+
+
+def _frame_likely_covered(frame) -> bool:
+    height, width = frame.shape[:2]
+    if height <= 0 or width <= 0:
+        return False
+
+    top = height // 4
+    bottom = height - top
+    left = width // 4
+    right = width - left
+    crop = frame[top:bottom, left:right]
+    if crop.size == 0:
+        return False
+
+    gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+    if float(gray.mean()) < 35.0:
+        return True
+
+    ycrcb = cv2.cvtColor(crop, cv2.COLOR_BGR2YCrCb)
+    y_channel, cr_channel, cb_channel = cv2.split(ycrcb)
+    skin_mask = (
+        (y_channel >= 45)
+        & (cr_channel >= 133)
+        & (cr_channel <= 173)
+        & (cb_channel >= 77)
+        & (cb_channel <= 127)
+    )
+    return float(skin_mask.mean()) >= 0.35
+
+
+def _face_loss_notice(frame) -> str:
+    if _frame_likely_covered(frame):
+        return "Face covered - game paused"
+    return "Face out of frame - game paused"
 
 
 def _configure_windows_app_identity() -> None:
@@ -103,6 +139,7 @@ def main() -> int:
     )
 
     tracker = FaceTracker(head_smoothing_alpha=cfg.snake_head_smoothing_alpha)
+    sound_player = SoundPlayer()
     snake_game = SnakeGame(
         grid_width=cfg.snake_grid_width,
         grid_height=cfg.snake_grid_height,
@@ -177,7 +214,7 @@ def main() -> int:
                 if face_missing_started_s is None:
                     face_missing_started_s = now
                 elif (now - face_missing_started_s) >= cfg.snake_face_loss_pause_s:
-                    snake_game.open_pause_menu("Face covered - game paused")
+                    snake_game.open_pause_menu(_face_loss_notice(frame))
                     face_missing_started_s = None
             else:
                 face_missing_started_s = None
@@ -193,6 +230,9 @@ def main() -> int:
                 snake_game.set_direction(signal.direction)
 
             snake_game.update(now)
+            for sound_event in snake_game.pop_sound_events():
+                sound_player.play(sound_event)
+
             target_size = _window_target_size(
                 cfg.snake_window_name,
                 (cfg.snake_window_width, cfg.snake_window_height),
@@ -220,6 +260,8 @@ def main() -> int:
             handled = snake_game.handle_key(key)
             if key in (ord("c"), ord("C")):
                 head_controller.reset_calibration()
+            for sound_event in snake_game.pop_sound_events():
+                sound_player.play(sound_event)
             if snake_game.quit_requested:
                 break
             if key == 27 and not handled:

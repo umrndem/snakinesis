@@ -1,0 +1,10 @@
+Sound assets:
+
+- menu_move.wav, menu_select.wav, menu_back.wav, pause.wav,
+  food_pickup.wav, death.wav
+  Generated for Snakinesis.
+
+- quit_hiss.wav
+  Public domain rattlesnake WAV from Parallax Learn Sound Library.
+  Listed source: U.S. Fish & Wildlife.
+  Reference: https://learn.parallax.com/reference/sound-library/

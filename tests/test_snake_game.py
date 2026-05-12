@@ -8,6 +8,7 @@ import unittest
 
 import numpy as np
 
+from snakinesis.app import _face_loss_notice
 from snakinesis.gesture import GazeDirection
 from snakinesis.landmarks import (
     CHIN,
@@ -27,6 +28,23 @@ class FakeTracking:
     head_h_ratio: float = 0.50
     head_v_ratio: float = 0.50
     head_roll_deg: float = 0.0
+
+
+class FaceLossNoticeTests(unittest.TestCase):
+    def test_dark_obstruction_reports_face_covered(self) -> None:
+        frame = np.zeros((120, 160, 3), dtype=np.uint8)
+
+        self.assertEqual(_face_loss_notice(frame), "Face covered - game paused")
+
+    def test_skin_colored_obstruction_reports_face_covered(self) -> None:
+        frame = np.full((120, 160, 3), (90, 140, 200), dtype=np.uint8)
+
+        self.assertEqual(_face_loss_notice(frame), "Face covered - game paused")
+
+    def test_visible_background_reports_face_out_of_frame(self) -> None:
+        frame = np.full((120, 160, 3), (180, 120, 40), dtype=np.uint8)
+
+        self.assertEqual(_face_loss_notice(frame), "Face out of frame - game paused")
 
 
 def make_controller(calibration_frames: int = 4) -> HeadGestureController:
@@ -293,13 +311,59 @@ class SnakeGameTests(unittest.TestCase):
         self.assertEqual(game.boundary_mode, BoundaryMode.WALLS)
         self.assertEqual(game.screen, SnakeScreen.MAIN_MENU)
 
-    def test_main_menu_opens_instructions(self) -> None:
+    def test_main_menu_toggles_sound(self) -> None:
         game = SnakeGame(10, 10, 10, 0.50, start_in_menu=True)
 
         game._menu_index = 2
         game._select_menu_item()
 
+        self.assertFalse(game.sound_enabled)
+        self.assertIn("Sound: OFF", game._main_menu_items)
+        self.assertEqual(game.pop_sound_events(), ("menu_select",))
+
+    def test_pause_menu_includes_sound_toggle(self) -> None:
+        game = SnakeGame(10, 10, 10, 0.50)
+
+        game.open_pause_menu()
+
+        self.assertIn("Sound: ON", game._main_menu_items)
+        self.assertNotIn("Classic Walls: OFF", game._main_menu_items)
+        self.assertEqual(game.pop_sound_events(), ("pause",))
+
+    def test_enabling_sound_queues_select_sound_after_toggle(self) -> None:
+        game = SnakeGame(10, 10, 10, 0.50, start_in_menu=True)
+        game._sound_enabled = False
+
+        game._menu_index = 2
+        game._select_menu_item()
+
+        self.assertTrue(game.sound_enabled)
+        self.assertEqual(game.pop_sound_events(), ("menu_select",))
+
+    def test_menu_browsing_queues_sound_event(self) -> None:
+        game = SnakeGame(10, 10, 10, 0.50, start_in_menu=True)
+
+        game.handle_key(ord("s"))
+
+        self.assertEqual(game.pop_sound_events(), ("menu_move",))
+        self.assertEqual(game.pop_sound_events(), ())
+
+    def test_disabled_sound_suppresses_sound_events(self) -> None:
+        game = SnakeGame(10, 10, 10, 0.50, start_in_menu=True)
+
+        game._toggle_sound()
+        game.handle_key(ord("s"))
+
+        self.assertEqual(game.pop_sound_events(), ())
+
+    def test_main_menu_opens_instructions(self) -> None:
+        game = SnakeGame(10, 10, 10, 0.50, start_in_menu=True)
+
+        game._menu_index = 3
+        game._select_menu_item()
+
         self.assertEqual(game.screen, SnakeScreen.INSTRUCTIONS)
+        self.assertEqual(game.pop_sound_events(), ("menu_select",))
 
     def test_pause_menu_hides_boundary_toggle(self) -> None:
         game = SnakeGame(10, 10, 10, 0.50)
@@ -308,13 +372,13 @@ class SnakeGameTests(unittest.TestCase):
 
         self.assertEqual(game.screen, SnakeScreen.MAIN_MENU)
         self.assertNotIn("Classic Walls: OFF", game._main_menu_items)
-        self.assertEqual(game._main_menu_items, ("Resume Game", "Instructions", "High Scores", "Return to Main Menu", "Quit"))
+        self.assertEqual(game._main_menu_items, ("Resume Game", "Sound: ON", "Instructions", "High Scores", "Return to Main Menu", "Quit"))
 
     def test_pause_menu_resume_does_not_toggle_boundary_mode(self) -> None:
         game = SnakeGame(10, 10, 10, 0.50)
 
         game.handle_key(27)
-        game._menu_index = 1
+        game._menu_index = 2
         game._select_menu_item()
 
         self.assertEqual(game.boundary_mode, BoundaryMode.BOUNDARYLESS)
@@ -324,7 +388,7 @@ class SnakeGameTests(unittest.TestCase):
         game = SnakeGame(10, 10, 10, 0.50)
 
         game.open_pause_menu()
-        game._menu_index = 3
+        game._menu_index = 4
         self.assertEqual(game._selected_menu_warning(), "ALL PROGRESS WILL BE LOST")
         game._select_menu_item()
 
@@ -365,6 +429,51 @@ class SnakeGameTests(unittest.TestCase):
         self.assertTrue(handled)
         self.assertEqual(game.screen, SnakeScreen.EXITING)
         self.assertFalse(game.quit_requested)
+        self.assertEqual(game.pop_sound_events(), ("quit_hiss",))
+
+    def test_back_from_submenu_queues_back_sound(self) -> None:
+        game = SnakeGame(10, 10, 10, 0.50, start_in_menu=True)
+        game._screen = SnakeScreen.INSTRUCTIONS
+
+        game.handle_key(27)
+
+        self.assertEqual(game.screen, SnakeScreen.MAIN_MENU)
+        self.assertEqual(game.pop_sound_events(), ("menu_back",))
+
+    def test_back_from_pause_menu_queues_back_sound(self) -> None:
+        game = SnakeGame(10, 10, 10, 0.50)
+
+        game.open_pause_menu()
+        game.pop_sound_events()
+        game.handle_key(27)
+
+        self.assertEqual(game.screen, SnakeScreen.PLAYING)
+        self.assertEqual(game.pop_sound_events(), ("menu_back",))
+
+    def test_food_pickup_queues_sound_event(self) -> None:
+        game = SnakeGame(6, 6, 10, 0.50)
+        game._snake = deque([(2, 2), (1, 2), (0, 2)])
+        game._direction = GazeDirection.RIGHT
+        game._pending_direction = GazeDirection.RIGHT
+        game._food = (2, 1)
+
+        game.update(1.0)
+        game.update(1.6)
+
+        self.assertEqual(game.pop_sound_events(), ("food_pickup",))
+
+    def test_death_queues_sound_event(self) -> None:
+        game = SnakeGame(5, 5, 10, 0.50)
+        game._boundary_mode = BoundaryMode.WALLS
+        game._snake = deque([(7, 4), (6, 4), (5, 4)])
+        game._direction = GazeDirection.RIGHT
+        game._pending_direction = GazeDirection.RIGHT
+        game._food = (1, 1)
+
+        game.update(1.0)
+
+        self.assertTrue(game.game_over)
+        self.assertEqual(game.pop_sound_events(), ("death",))
 
     def test_hold_progress_uses_top_global_bar_without_bottom_text(self) -> None:
         game = SnakeGame(10, 10, 10, 0.50)
