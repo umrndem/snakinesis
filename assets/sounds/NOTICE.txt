@@ -1,7 +1,7 @@
 Sound assets:
 
 - menu_move.wav, menu_select.wav, menu_back.wav, pause.wav,
-  food_pickup.wav, death.wav
+  food_pickup.wav, bonus_food_pickup.wav, death.wav
   Generated for Snakinesis.
 
 - quit_hiss.wav

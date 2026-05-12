@@ -56,6 +56,7 @@ High scores are stored separately for Boundaryless and Classic Walls mode in `sn
 - Backing out of submenus or the pause menu plays a descending back cue.
 - Pausing the game plays a short pause cue.
 - Food pickup plays a bright reward chime.
+- Bonus food pickup plays a bigger jackpot chime.
 - Self-collision or wall collision plays a death cue.
 - Quitting plays a short snake hiss.
 - Sound can be toggled ON/OFF directly from both the main menu and pause menu.
@@ -116,6 +117,7 @@ Pipeline:
 │   ├── snakinesis_logo.png
 │   ├── snakinesis.ico
 │   ├── sounds/
+│   │   ├── bonus_food_pickup.wav
 │   │   ├── death.wav
 │   │   ├── food_pickup.wav
 │   │   ├── menu_back.wav

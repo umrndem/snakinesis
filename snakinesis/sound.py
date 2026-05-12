@@ -29,6 +29,7 @@ class SoundPlayer:
             "menu_back": _resource_path("assets", "sounds", "menu_back.wav"),
             "pause": _resource_path("assets", "sounds", "pause.wav"),
             "food_pickup": _resource_path("assets", "sounds", "food_pickup.wav"),
+            "bonus_food_pickup": _resource_path("assets", "sounds", "bonus_food_pickup.wav"),
             "death": _resource_path("assets", "sounds", "death.wav"),
             "quit_hiss": _resource_path("assets", "sounds", "quit_hiss.wav"),
         }

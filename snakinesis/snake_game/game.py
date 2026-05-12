@@ -466,7 +466,7 @@ class SnakeGame:
         if eating_bonus:
             self._score += self.bonus_food_score
             self._bonus_food = None
-            self._queue_sound("food_pickup")
+            self._queue_sound("bonus_food_pickup")
         elif eating:
             self._score += 1
             self._normal_foods_since_bonus += 1
@@ -531,7 +531,7 @@ class SnakeGame:
             color = (80, 245, 210) if idx == 0 else (0, 150, 90)
             self._draw_unit_point(board, point, color)
 
-        face_status = "FACE LOCKED" if tracking_available else "NO FACE LOCK"
+        face_status = "FACE LOCKED" if tracking_available else control_status.upper()
         self._draw_pixel_text(canvas, f"SCORE {self._score}  BEST {self.high_score}", (16, 16), 15, (255, 255, 255))
         self._draw_pixel_text(canvas, f"INPUT {control_direction.value}", (16, 48), 13, (0, 200, 255))
         self._draw_pixel_text(canvas, face_status, (16, 78), 9, (180, 255, 180) if tracking_available else (70, 170, 255))

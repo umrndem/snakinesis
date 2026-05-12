@@ -8,7 +8,7 @@ import unittest
 
 import numpy as np
 
-from snakinesis.app import _face_loss_notice
+from snakinesis.app import _face_loss_notice, _face_loss_status
 from snakinesis.gesture import GazeDirection
 from snakinesis.landmarks import (
     CHIN,
@@ -41,8 +41,21 @@ class FaceLossNoticeTests(unittest.TestCase):
 
         self.assertEqual(_face_loss_notice(frame), "Face covered - game paused")
 
+    def test_partial_hand_obstruction_reports_face_covered(self) -> None:
+        frame = np.full((120, 160, 3), (180, 120, 40), dtype=np.uint8)
+        frame[44:76, 60:100] = (45, 70, 110)
+
+        self.assertEqual(_face_loss_notice(frame), "Face covered - game paused")
+        self.assertEqual(_face_loss_status(frame), "Face covered")
+
     def test_visible_background_reports_face_out_of_frame(self) -> None:
         frame = np.full((120, 160, 3), (180, 120, 40), dtype=np.uint8)
+
+        self.assertEqual(_face_loss_notice(frame), "Face out of frame - game paused")
+        self.assertEqual(_face_loss_status(frame), "Face out of frame")
+
+    def test_purple_background_reports_face_out_of_frame(self) -> None:
+        frame = np.full((120, 160, 3), (90, 60, 120), dtype=np.uint8)
 
         self.assertEqual(_face_loss_notice(frame), "Face out of frame - game paused")
 
@@ -290,6 +303,7 @@ class SnakeGameTests(unittest.TestCase):
         self.assertEqual(game.score, 5)
         self.assertIsNone(game._bonus_food)
         self.assertEqual(len(game._snake), starting_length)
+        self.assertEqual(game.pop_sound_events(), ("bonus_food_pickup",))
 
     def test_menu_right_sector_selects_after_hold(self) -> None:
         game = SnakeGame(10, 10, 10, 0.50, start_in_menu=True, menu_hold_s=1.25, menu_side_threshold=0.107)

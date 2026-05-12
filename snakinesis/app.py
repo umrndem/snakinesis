@@ -40,16 +40,54 @@ def _window_target_size(window_name: str, fallback: Tuple[int, int]) -> Tuple[in
     return (width, height)
 
 
+def _center_crop(frame, margin_fraction: float):
+    height, width = frame.shape[:2]
+    margin_fraction = max(0.0, min(margin_fraction, 0.45))
+    top = int(height * margin_fraction)
+    bottom = max(top + 1, height - top)
+    left = int(width * margin_fraction)
+    right = max(left + 1, width - left)
+    return frame[top:bottom, left:right]
+
+
+def _skin_like_ratio(crop) -> float:
+    if crop.size == 0:
+        return 0.0
+
+    ycrcb = cv2.cvtColor(crop, cv2.COLOR_BGR2YCrCb)
+    y_channel, cr_channel, cb_channel = cv2.split(ycrcb)
+    hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
+    h_channel, s_channel, v_channel = cv2.split(hsv)
+    b_channel, g_channel, r_channel = (channel.astype("int16") for channel in cv2.split(crop))
+    warm_mask = (
+        (r_channel >= 55)
+        & (g_channel >= 35)
+        & (r_channel >= b_channel + 10)
+        & (g_channel >= b_channel - 24)
+        & (r_channel >= g_channel - 28)
+    )
+    ycrcb_skin = (
+        (y_channel >= 35)
+        & (cr_channel >= 120)
+        & (cr_channel <= 190)
+        & (cb_channel >= 70)
+        & (cb_channel <= 150)
+    )
+    hsv_skin = (
+        (h_channel <= 25)
+        & (s_channel >= 20)
+        & (s_channel <= 235)
+        & (v_channel >= 35)
+    )
+    return float(((ycrcb_skin | hsv_skin) & warm_mask).mean())
+
+
 def _frame_likely_covered(frame) -> bool:
     height, width = frame.shape[:2]
     if height <= 0 or width <= 0:
         return False
 
-    top = height // 4
-    bottom = height - top
-    left = width // 4
-    right = width - left
-    crop = frame[top:bottom, left:right]
+    crop = _center_crop(frame, 0.20)
     if crop.size == 0:
         return False
 
@@ -57,22 +95,18 @@ def _frame_likely_covered(frame) -> bool:
     if float(gray.mean()) < 35.0:
         return True
 
-    ycrcb = cv2.cvtColor(crop, cv2.COLOR_BGR2YCrCb)
-    y_channel, cr_channel, cb_channel = cv2.split(ycrcb)
-    skin_mask = (
-        (y_channel >= 45)
-        & (cr_channel >= 133)
-        & (cr_channel <= 173)
-        & (cb_channel >= 77)
-        & (cb_channel <= 127)
-    )
-    return float(skin_mask.mean()) >= 0.35
+    inner_crop = _center_crop(frame, 0.34)
+    return _skin_like_ratio(crop) >= 0.18 or _skin_like_ratio(inner_crop) >= 0.28
+
+
+def _face_loss_status(frame) -> str:
+    if _frame_likely_covered(frame):
+        return "Face covered"
+    return "Face out of frame"
 
 
 def _face_loss_notice(frame) -> str:
-    if _frame_likely_covered(frame):
-        return "Face covered - game paused"
-    return "Face out of frame - game paused"
+    return f"{_face_loss_status(frame)} - game paused"
 
 
 def _configure_windows_app_identity() -> None:
@@ -208,13 +242,14 @@ def main() -> int:
 
             now = time.perf_counter()
             signal = head_controller.update(tracking, face_present=tracking_available, now_s=now)
+            face_loss_status = None if tracking_available else _face_loss_status(frame)
             if tracking_available:
                 face_missing_started_s = None
             elif snake_game.accepts_direction_input:
                 if face_missing_started_s is None:
                     face_missing_started_s = now
                 elif (now - face_missing_started_s) >= cfg.snake_face_loss_pause_s:
-                    snake_game.open_pause_menu(_face_loss_notice(frame))
+                    snake_game.open_pause_menu(f"{face_loss_status} - game paused")
                     face_missing_started_s = None
             else:
                 face_missing_started_s = None
@@ -242,7 +277,7 @@ def main() -> int:
                 snake_game.render(
                     tracking_available=tracking_available,
                     control_direction=signal.direction,
-                    control_status=signal.status,
+                    control_status=face_loss_status or signal.status,
                     calibration_progress=signal.calibration_progress,
                     dx=signal.dx,
                     dy=signal.dy,
