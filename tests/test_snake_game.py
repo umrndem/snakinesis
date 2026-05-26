@@ -407,7 +407,7 @@ class SnakeGameTests(unittest.TestCase):
         game._select_menu_item()
 
         self.assertEqual(game.screen, SnakeScreen.ABOUT)
-        self.assertEqual(APP_VERSION, "1.1")
+        self.assertEqual(APP_VERSION, "1.1.1")
         self.assertIn(("Muhammad Umar Nadeem", "github.com/umrndem"), AUTHORS)
         self.assertIn(("Shifa Zeeshan", "github.com/AshwaZeeshan"), AUTHORS)
         self.assertEqual(game.pop_sound_events(), ("menu_select",))
@@ -553,6 +553,23 @@ class SnakeGameTests(unittest.TestCase):
         self.assertTrue(board[6:29].any())
         self.assertFalse(board[34:70].any())
         self.assertFalse(board[360:470].any())
+
+    def test_main_menu_panel_covers_quit_row(self) -> None:
+        game = SnakeGame(16, 16, 36, 0.50, start_in_menu=True)
+        board = np.full((576, 576, 3), (48, 36, 58), dtype=np.uint8)
+
+        game._draw_menu_panel(board, "SNAKINESIS", "HEAD UP/DOWN | HOLD RIGHT TO SELECT", game._main_menu_items, 0)
+
+        self.assertFalse(np.array_equal(board[540, 80], np.array((48, 36, 58), dtype=np.uint8)))
+
+    def test_pause_menu_panel_covers_quit_row(self) -> None:
+        game = SnakeGame(16, 16, 36, 0.50, start_in_menu=True)
+        game.open_pause_menu()
+        board = np.full((576, 576, 3), (48, 36, 58), dtype=np.uint8)
+
+        game._draw_menu_panel(board, "SNAKINESIS", "HEAD UP/DOWN | HOLD RIGHT TO SELECT", game._main_menu_items, 0)
+
+        self.assertFalse(np.array_equal(board[540, 80], np.array((48, 36, 58), dtype=np.uint8)))
 
     def test_right_sector_does_nothing_on_info_panes(self) -> None:
         game = SnakeGame(10, 10, 10, 0.50, start_in_menu=True, menu_hold_s=1.25, menu_side_threshold=0.107)

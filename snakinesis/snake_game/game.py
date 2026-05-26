@@ -20,7 +20,7 @@ from ..gesture import GazeDirection
 GridPoint = Tuple[int, int]
 UnitPoint = Tuple[int, int]
 
-APP_VERSION = "1.1"
+APP_VERSION = "1.1.1"
 AUTHORS = (
     ("Muhammad Umar Nadeem", "github.com/umrndem"),
     ("Shifa Zeeshan", "github.com/AshwaZeeshan"),
@@ -745,7 +745,7 @@ class SnakeGame:
     def _draw_menu_panel(self, board: np.ndarray, title: str, subtitle: str, items: Tuple[str, ...], selected_index: int) -> None:
         height, width = board.shape[:2]
         overlay = board.copy()
-        cv2.rectangle(overlay, (44, 54), (width - 44, height - 54), (24, 16, 34), -1)
+        cv2.rectangle(overlay, (44, 44), (width - 44, height - 22), (24, 16, 34), -1)
         board[:] = cv2.addWeighted(overlay, 0.78, board, 0.22, 0.0)
         if title == "SNAKINESIS":
             self._draw_logo(board, (width - 176, 70), 96)
