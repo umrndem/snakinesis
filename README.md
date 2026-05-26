@@ -10,10 +10,10 @@ The project is built with Python, OpenCV, MediaPipe FaceMesh, NumPy, and Pillow.
 - Calibrated face-center tracking instead of unreliable iris/eye-gaze control
 - One-shot movement gestures: move once, return to neutral, then move again
 - Boundaryless wrap mode and optional Classic Walls mode
-- Main menu, pause menu, instructions pane, high scores, and game-over menu
+- Main menu, pause menu, instructions pane, about pane, high scores, and game-over menu
 - Timed 2x2 bonus food that gives extra score without growing the snake
 - Auto-pause with separate messages for covered face vs. face out of frame
-- Sound effects for menu browsing, menu select/back, pause, food pickup, death, and hissing quit
+- Sound effects for menu browsing, menu select/back, pause, normal food, bonus food, death, and hissing quit
 - Graceful goodbye screen: `GOODBYE` / `HISS YOU LATER`
 - Retro pixel-art logo, icon, color palette, and Press Start 2P font
 - Resizable OpenCV window with proportional letterboxing
@@ -45,9 +45,16 @@ High scores are stored separately for Boundaryless and Classic Walls mode in `sn
 
 - Press `P` or `Esc` during gameplay to open the pause menu.
 - Losing face tracking briefly during gameplay opens the pause menu automatically, with separate notices for a covered face and a face that moved out of frame.
-- The pause menu includes `Resume Game`, `Sound`, `Instructions`, `High Scores`, `Return to Main Menu`, and `Quit`.
+- The pause menu includes `Resume Game`, `Sound`, `Camera Flip`, `Instructions`, `High Scores`, `About`, `Return to Main Menu`, and `Quit`.
 - `Return to Main Menu` warns that all current progress will be lost.
 - Quitting shows a short goodbye screen before the app closes.
+
+### About
+
+The About pane shows the current version and project authors:
+
+- Muhammad Umar Nadeem — `https://github.com/umrndem`
+- Shifa Zeeshan — `https://github.com/AshwaZeeshan`
 
 ### Sound Effects
 
@@ -79,6 +86,8 @@ Sound playback uses the cross-platform `sounddevice` package and bundled WAV fil
 | Auto-pause | Cover face or move fully out of frame briefly |
 
 The small tracking pad in the UI shows the live head position. A movement is registered only when the tracking dot crosses the configured activation radius. After a movement fires, the dot must return to the neutral zone before another movement can trigger.
+
+`Camera Flip` can be toggled from the menus if a webcam already provides a mirrored feed or if left/right movement feels reversed. Toggling it resets calibration automatically on the next frame.
 
 ### Keyboard Fallbacks
 
@@ -151,7 +160,7 @@ Pipeline:
 - `snakinesis/app.py`: webcam loop, FaceMesh integration, OpenCV window handling, icon setup, and app lifecycle.
 - `snakinesis/config.py`: central configuration for camera, game speed, grid size, tracking sensitivity, menus, and timing.
 - `snakinesis/tracker.py`: converts FaceMesh landmarks into smoothed face-center and roll measurements.
-- `snakinesis/sound.py`: lightweight Windows sound-effect playback for bundled WAV files.
+- `snakinesis/sound.py`: lightweight cross-platform sound-effect playback for bundled WAV files.
 - `snakinesis/snake_game/head_control.py`: calibration, neutral zone handling, movement activation, one-shot gesture re-arming, and menu tilt signals.
 - `snakinesis/snake_game/game.py`: Snake state machine, collision rules, food spawning, menus, high scores, rendering, pause logic, and graceful exit.
 - `snakinesis/landmarks.py`: MediaPipe landmark indices used by the tracker.
@@ -242,6 +251,7 @@ Most gameplay and tracking behavior lives in `snakinesis/config.py`.
 | `snake_bonus_food_score` | `5` | Bonus food score reward |
 | `snake_bonus_food_duration_s` | `6.0` | Bonus food lifetime |
 | `snake_exit_message_s` | `2.4` | Goodbye screen duration |
+| `flip_selfie` | `True` | Starts with mirrored selfie camera mode enabled |
 
 If controls feel too sensitive, increase `snake_control_threshold` and `snake_release_threshold`. If controls feel sluggish, lower them slightly.
 
@@ -277,6 +287,12 @@ The tests cover:
 - Make sure no other app is using the webcam.
 - Check camera permissions in the operating system.
 - Try changing `camera_index` in `snakinesis/config.py` from `0` to `1`.
+- If packaged as an exe, Snakinesis shows a camera error prompt instead of failing silently.
+
+### Camera Feed Is Mirrored Incorrectly
+
+- Toggle `Camera Flip` in the main or pause menu.
+- Press `C` after changing the camera orientation if the center dot feels offset.
 
 ### Tracking Feels Off
 

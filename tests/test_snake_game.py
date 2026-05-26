@@ -8,7 +8,7 @@ import unittest
 
 import numpy as np
 
-from snakinesis.app import _face_loss_notice, _face_loss_status
+from snakinesis.app import _camera_error_lines, _face_loss_notice, _face_loss_status
 from snakinesis.gesture import GazeDirection
 from snakinesis.landmarks import (
     CHIN,
@@ -20,6 +20,8 @@ from snakinesis.landmarks import (
     RIGHT_EYE_EAR,
 )
 from snakinesis.snake_game import BonusFood, BoundaryMode, HeadGestureController, SnakeGame, SnakeScreen
+from snakinesis.snake_game.game import APP_VERSION, AUTHORS
+from snakinesis.sound import SoundPlayer
 from snakinesis.tracker import FaceTracker
 
 
@@ -58,6 +60,14 @@ class FaceLossNoticeTests(unittest.TestCase):
         frame = np.full((120, 160, 3), (90, 60, 120), dtype=np.uint8)
 
         self.assertEqual(_face_loss_notice(frame), "Face out of frame - game paused")
+
+
+class AppPromptTests(unittest.TestCase):
+    def test_camera_error_lines_include_camera_index(self) -> None:
+        lines = _camera_error_lines(3)
+
+        self.assertIn("camera index 3", lines[0])
+        self.assertTrue(any("privacy permissions" in line for line in lines))
 
 
 def make_controller(calibration_frames: int = 4) -> HeadGestureController:
@@ -335,12 +345,23 @@ class SnakeGameTests(unittest.TestCase):
         self.assertIn("Sound: OFF", game._main_menu_items)
         self.assertEqual(game.pop_sound_events(), ("menu_select",))
 
+    def test_main_menu_toggles_camera_flip(self) -> None:
+        game = SnakeGame(10, 10, 10, 0.50, start_in_menu=True, camera_flipped=True)
+
+        game._menu_index = 3
+        game._select_menu_item()
+
+        self.assertFalse(game.camera_flipped)
+        self.assertIn("Camera Flip: OFF", game._main_menu_items)
+        self.assertEqual(game.pop_sound_events(), ("menu_select",))
+
     def test_pause_menu_includes_sound_toggle(self) -> None:
         game = SnakeGame(10, 10, 10, 0.50)
 
         game.open_pause_menu()
 
         self.assertIn("Sound: ON", game._main_menu_items)
+        self.assertIn("Camera Flip: ON", game._main_menu_items)
         self.assertNotIn("Classic Walls: OFF", game._main_menu_items)
         self.assertEqual(game.pop_sound_events(), ("pause",))
 
@@ -373,10 +394,22 @@ class SnakeGameTests(unittest.TestCase):
     def test_main_menu_opens_instructions(self) -> None:
         game = SnakeGame(10, 10, 10, 0.50, start_in_menu=True)
 
-        game._menu_index = 3
+        game._menu_index = 4
         game._select_menu_item()
 
         self.assertEqual(game.screen, SnakeScreen.INSTRUCTIONS)
+        self.assertEqual(game.pop_sound_events(), ("menu_select",))
+
+    def test_main_menu_opens_about_with_authors_and_version(self) -> None:
+        game = SnakeGame(10, 10, 10, 0.50, start_in_menu=True)
+
+        game._menu_index = 6
+        game._select_menu_item()
+
+        self.assertEqual(game.screen, SnakeScreen.ABOUT)
+        self.assertEqual(APP_VERSION, "1.1")
+        self.assertIn(("Muhammad Umar Nadeem", "github.com/umrndem"), AUTHORS)
+        self.assertIn(("Shifa Zeeshan", "github.com/AshwaZeeshan"), AUTHORS)
         self.assertEqual(game.pop_sound_events(), ("menu_select",))
 
     def test_pause_menu_hides_boundary_toggle(self) -> None:
@@ -386,13 +419,16 @@ class SnakeGameTests(unittest.TestCase):
 
         self.assertEqual(game.screen, SnakeScreen.MAIN_MENU)
         self.assertNotIn("Classic Walls: OFF", game._main_menu_items)
-        self.assertEqual(game._main_menu_items, ("Resume Game", "Sound: ON", "Instructions", "High Scores", "Return to Main Menu", "Quit"))
+        self.assertEqual(
+            game._main_menu_items,
+            ("Resume Game", "Sound: ON", "Camera Flip: ON", "Instructions", "High Scores", "About", "Return to Main Menu", "Quit"),
+        )
 
     def test_pause_menu_resume_does_not_toggle_boundary_mode(self) -> None:
         game = SnakeGame(10, 10, 10, 0.50)
 
         game.handle_key(27)
-        game._menu_index = 2
+        game._menu_index = 3
         game._select_menu_item()
 
         self.assertEqual(game.boundary_mode, BoundaryMode.BOUNDARYLESS)
@@ -402,7 +438,7 @@ class SnakeGameTests(unittest.TestCase):
         game = SnakeGame(10, 10, 10, 0.50)
 
         game.open_pause_menu()
-        game._menu_index = 4
+        game._menu_index = 6
         self.assertEqual(game._selected_menu_warning(), "ALL PROGRESS WILL BE LOST")
         game._select_menu_item()
 
@@ -489,6 +525,23 @@ class SnakeGameTests(unittest.TestCase):
         self.assertTrue(game.game_over)
         self.assertEqual(game.pop_sound_events(), ("death",))
 
+    def test_sound_player_maps_all_game_feedback_events(self) -> None:
+        expected = {
+            "menu_move",
+            "menu_select",
+            "menu_back",
+            "pause",
+            "food_pickup",
+            "bonus_food_pickup",
+            "death",
+            "quit_hiss",
+        }
+        player = SoundPlayer()
+
+        self.assertTrue(expected.issubset(player._sounds.keys()))
+        for sound_name in expected:
+            self.assertTrue(player._sounds[sound_name].exists(), sound_name)
+
     def test_hold_progress_uses_top_global_bar_without_bottom_text(self) -> None:
         game = SnakeGame(10, 10, 10, 0.50)
         board = np.zeros((500, 600, 3), dtype=np.uint8)
@@ -504,7 +557,7 @@ class SnakeGameTests(unittest.TestCase):
     def test_right_sector_does_nothing_on_info_panes(self) -> None:
         game = SnakeGame(10, 10, 10, 0.50, start_in_menu=True, menu_hold_s=1.25, menu_side_threshold=0.107)
 
-        for screen in (SnakeScreen.INSTRUCTIONS, SnakeScreen.HIGH_SCORES):
+        for screen in (SnakeScreen.INSTRUCTIONS, SnakeScreen.HIGH_SCORES, SnakeScreen.ABOUT):
             game._screen = screen
             game.update_menu_control(direction=GazeDirection.CENTER, dx=0.13, dy=0.02, roll_delta_deg=0.0, now_s=0.0)
             game.update_menu_control(direction=GazeDirection.CENTER, dx=0.13, dy=0.02, roll_delta_deg=0.0, now_s=1.3)

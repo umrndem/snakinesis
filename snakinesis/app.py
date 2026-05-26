@@ -40,6 +40,40 @@ def _window_target_size(window_name: str, fallback: Tuple[int, int]) -> Tuple[in
     return (width, height)
 
 
+def _camera_error_lines(camera_index: int) -> Tuple[str, ...]:
+    return (
+        f"Could not open camera index {camera_index}.",
+        "Close other webcam apps, check privacy permissions,",
+        "or change camera_index in snakinesis/config.py.",
+        "Press any key to close.",
+    )
+
+
+def _show_error_prompt(window_name: str, title: str, lines: Tuple[str, ...]) -> None:
+    print(f"ERROR: {title}")
+    for line in lines:
+        print(line)
+
+    canvas = cv2.UMat(280, 720, cv2.CV_8UC3).get()
+    canvas[:, :] = (32, 22, 38)
+    cv2.putText(canvas, title, (32, 56), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 245, 235), 2, cv2.LINE_AA)
+    y = 108
+    for line in lines:
+        cv2.putText(canvas, line, (32, y), cv2.FONT_HERSHEY_SIMPLEX, 0.54, (70, 230, 255), 1, cv2.LINE_AA)
+        y += 38
+
+    try:
+        cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+        cv2.resizeWindow(window_name, 720, 280)
+        while _window_is_open(window_name):
+            cv2.imshow(window_name, canvas)
+            if cv2.waitKey(100) != -1:
+                break
+        cv2.destroyWindow(window_name)
+    except cv2.error:
+        pass
+
+
 def _center_crop(frame, margin_fraction: float):
     height, width = frame.shape[:2]
     margin_fraction = max(0.0, min(margin_fraction, 0.45))
@@ -155,7 +189,7 @@ def main() -> int:
 
     cap = cv2.VideoCapture(cfg.camera_index)
     if not cap.isOpened():
-        print("ERROR: Could not open webcam.")
+        _show_error_prompt(cfg.snake_window_name, "Camera Error", _camera_error_lines(cfg.camera_index))
         return 2
 
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, cfg.camera_width)
@@ -190,6 +224,7 @@ def main() -> int:
         menu_tilt_release_deg=cfg.snake_menu_tilt_release_deg,
         menu_side_threshold=cfg.snake_menu_side_threshold,
         menu_side_release_threshold=cfg.snake_menu_side_release_threshold,
+        camera_flipped=cfg.flip_selfie,
         start_in_menu=True,
     )
     head_controller = HeadGestureController(
@@ -201,6 +236,7 @@ def main() -> int:
         neutral_rearm_s=cfg.snake_neutral_rearm_s,
     )
     face_missing_started_s: Optional[float] = None
+    last_camera_flipped = snake_game.camera_flipped
 
     try:
         while True:
@@ -211,7 +247,7 @@ def main() -> int:
             if not ok:
                 break
 
-            if cfg.flip_selfie:
+            if snake_game.camera_flipped:
                 frame = cv2.flip(frame, 1)
 
             tracking_frame = frame
@@ -261,6 +297,9 @@ def main() -> int:
                 roll_delta_deg=signal.roll_delta_deg,
                 now_s=now,
             )
+            if snake_game.camera_flipped != last_camera_flipped:
+                head_controller.reset_calibration()
+                last_camera_flipped = snake_game.camera_flipped
             if signal.direction != GazeDirection.CENTER:
                 snake_game.set_direction(signal.direction)
 
@@ -295,6 +334,9 @@ def main() -> int:
             handled = snake_game.handle_key(key)
             if key in (ord("c"), ord("C")):
                 head_controller.reset_calibration()
+            if snake_game.camera_flipped != last_camera_flipped:
+                head_controller.reset_calibration()
+                last_camera_flipped = snake_game.camera_flipped
             for sound_event in snake_game.pop_sound_events():
                 sound_player.play(sound_event)
             if snake_game.quit_requested:

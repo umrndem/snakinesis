@@ -20,6 +20,12 @@ from ..gesture import GazeDirection
 GridPoint = Tuple[int, int]
 UnitPoint = Tuple[int, int]
 
+APP_VERSION = "1.1"
+AUTHORS = (
+    ("Muhammad Umar Nadeem", "github.com/umrndem"),
+    ("Shifa Zeeshan", "github.com/AshwaZeeshan"),
+)
+
 
 class BoundaryMode(str, Enum):
     BOUNDARYLESS = "Boundaryless"
@@ -30,6 +36,7 @@ class SnakeScreen(str, Enum):
     MAIN_MENU = "MAIN_MENU"
     INSTRUCTIONS = "INSTRUCTIONS"
     HIGH_SCORES = "HIGH_SCORES"
+    ABOUT = "ABOUT"
     PLAYING = "PLAYING"
     GAME_OVER = "GAME_OVER"
     EXITING = "EXITING"
@@ -79,6 +86,7 @@ class SnakeGame:
     menu_tilt_release_deg: float = 4.0
     menu_side_threshold: float = 0.107
     menu_side_release_threshold: float = 0.085
+    camera_flipped: bool = True
     start_in_menu: bool = False
     _snake: Deque[UnitPoint] = None  # type: ignore[assignment]
     _direction: GazeDirection = GazeDirection.RIGHT
@@ -118,6 +126,7 @@ class SnakeGame:
         self.menu_tilt_release_deg = max(0.5, float(self.menu_tilt_release_deg))
         self.menu_side_threshold = max(0.01, float(self.menu_side_threshold))
         self.menu_side_release_threshold = min(self.menu_side_threshold, max(0.0, float(self.menu_side_release_threshold)))
+        self.camera_flipped = bool(self.camera_flipped)
         self._high_scores = self._load_high_scores()
         self._sound_events = []
         self.reset()
@@ -320,12 +329,18 @@ class SnakeGame:
                 self._toggle_sound()
                 if not sound_was_enabled:
                     self._queue_sound("menu_select")
+            elif item.startswith("Camera Flip"):
+                self._queue_sound("menu_select")
+                self._toggle_camera_flip()
             elif item == "Instructions":
                 self._queue_sound("menu_select")
                 self._screen = SnakeScreen.INSTRUCTIONS
             elif item == "High Scores":
                 self._queue_sound("menu_select")
                 self._screen = SnakeScreen.HIGH_SCORES
+            elif item == "About":
+                self._queue_sound("menu_select")
+                self._screen = SnakeScreen.ABOUT
             elif item == "Return to Main Menu":
                 self._queue_sound("menu_select")
                 self._return_to_main_menu()
@@ -345,11 +360,17 @@ class SnakeGame:
                 self._pause_notice = None
                 self._screen = SnakeScreen.HIGH_SCORES
                 self._game_over = False
+            elif item == "About":
+                self._queue_sound("menu_select")
+                self._in_game_menu = False
+                self._pause_notice = None
+                self._screen = SnakeScreen.ABOUT
+                self._game_over = False
             elif item == "Quit":
                 self.request_quit()
 
     def _back_menu(self) -> None:
-        if self._screen in (SnakeScreen.INSTRUCTIONS, SnakeScreen.HIGH_SCORES):
+        if self._screen in (SnakeScreen.INSTRUCTIONS, SnakeScreen.HIGH_SCORES, SnakeScreen.ABOUT):
             self._queue_sound("menu_back")
             self._screen = SnakeScreen.MAIN_MENU
         elif self._screen == SnakeScreen.MAIN_MENU and self._in_game_menu:
@@ -369,6 +390,9 @@ class SnakeGame:
 
     def _toggle_sound(self) -> None:
         self._sound_enabled = not self._sound_enabled
+
+    def _toggle_camera_flip(self) -> None:
+        self.camera_flipped = not self.camera_flipped
 
     def _resume_game(self) -> None:
         self._screen = SnakeScreen.PLAYING
@@ -578,6 +602,8 @@ class SnakeGame:
             self._draw_instructions(board)
         elif self._screen == SnakeScreen.HIGH_SCORES:
             self._draw_high_scores(board)
+        elif self._screen == SnakeScreen.ABOUT:
+            self._draw_about(board)
 
         return self._letterbox(canvas, target_size)
 
@@ -630,14 +656,33 @@ class SnakeGame:
     @property
     def _main_menu_items(self) -> Tuple[str, ...]:
         sound_state = "ON" if self._sound_enabled else "OFF"
+        flip_state = "ON" if self.camera_flipped else "OFF"
         if self._in_game_menu:
-            return ("Resume Game", f"Sound: {sound_state}", "Instructions", "High Scores", "Return to Main Menu", "Quit")
+            return (
+                "Resume Game",
+                f"Sound: {sound_state}",
+                f"Camera Flip: {flip_state}",
+                "Instructions",
+                "High Scores",
+                "About",
+                "Return to Main Menu",
+                "Quit",
+            )
         walls_state = "ON" if self._boundary_mode == BoundaryMode.WALLS else "OFF"
-        return ("Start Game", f"Classic Walls: {walls_state}", f"Sound: {sound_state}", "Instructions", "High Scores", "Quit")
+        return (
+            "Start Game",
+            f"Classic Walls: {walls_state}",
+            f"Sound: {sound_state}",
+            f"Camera Flip: {flip_state}",
+            "Instructions",
+            "High Scores",
+            "About",
+            "Quit",
+        )
 
     @property
     def _game_over_items(self) -> Tuple[str, ...]:
-        return ("Restart", "Main Menu", "High Scores", "Quit")
+        return ("Restart", "Main Menu", "High Scores", "About", "Quit")
 
     def _apply_pending_direction(self) -> None:
         if not self._is_opposite(self._pending_direction, self._direction):
@@ -720,7 +765,7 @@ class SnakeGame:
 
         warning = self._selected_menu_warning()
         if warning:
-            warning_y = height - 132
+            warning_y = 184 if self._pause_notice else 164
             cv2.rectangle(board, (74, warning_y - 12), (width - 74, warning_y + 26), (72, 36, 58), -1)
             self._draw_pixel_text(board, warning, (96, warning_y), 9, (70, 170, 255))
 
@@ -763,6 +808,25 @@ class SnakeGame:
         self._draw_pixel_text(board, "HIGH SCORES", (86, 95), 20, (255, 245, 235))
         self._draw_pixel_text(board, f"BOUNDARYLESS: {self._high_scores.get('boundaryless', 0)}", (94, 195), 12, (70, 230, 255))
         self._draw_pixel_text(board, f"CLASSIC WALLS: {self._high_scores.get('walls', 0)}", (94, 252), 12, (70, 230, 255))
+        self._draw_pixel_text(board, "HOLD LEFT OR PRESS ESC", (94, height - 102), 9, (220, 220, 230))
+        self._draw_hold_progress(board, width, height)
+
+    def _draw_about(self, board: np.ndarray) -> None:
+        height, width = board.shape[:2]
+        overlay = board.copy()
+        cv2.rectangle(overlay, (44, 54), (width - 44, height - 54), (18, 18, 28), -1)
+        board[:] = cv2.addWeighted(overlay, 0.80, board, 0.20, 0.0)
+        self._draw_pixel_text(board, "ABOUT", (86, 88), 22, (255, 245, 235))
+        self._draw_pixel_text(board, f"SNAKINESIS V{APP_VERSION}", (94, 150), 12, (70, 230, 255))
+        self._draw_pixel_text(board, "A HANDS-FREE SNAKE GAME", (94, 196), 9, (220, 228, 238))
+        self._draw_pixel_text(board, "AUTHORS", (94, 258), 12, (255, 245, 235))
+
+        y = 312
+        for name, link in AUTHORS:
+            self._draw_pixel_text(board, name.upper(), (94, y), 10, (220, 228, 238))
+            self._draw_pixel_text(board, link, (94, y + 28), 8, (70, 230, 255))
+            y += 72
+
         self._draw_pixel_text(board, "HOLD LEFT OR PRESS ESC", (94, height - 102), 9, (220, 220, 230))
         self._draw_hold_progress(board, width, height)
 
